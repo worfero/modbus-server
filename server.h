@@ -67,11 +67,20 @@ struct ModbusFrame {
     unsigned char *data;
 };
 
-// declare registers as global variables
-extern short holding_registers[2000];
-extern short input_registers[2000];
-extern bool coils[2000];
-extern bool discrete_inputs[2000];
+struct Registers {
+    short HR[2000];
+    short IR[2000];
+    bool CO[2000];
+    bool DI[2000];
+};
+
+extern struct Registers registers;
+
+//// declare registers as global variables
+//extern short holding_registers[2000];
+//extern short input_registers[2000];
+//extern bool coils[2000];
+//extern bool discrete_inputs[2000];
 
 int server_setup();
 

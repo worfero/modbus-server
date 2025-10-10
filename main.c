@@ -7,10 +7,10 @@ int main() {
     int addrlen = sizeof(address);
 
     for(int i = 0; i < 101; i++) {
-        holding_registers[i] = i;
-        input_registers[i] = 2*i;
-        coils[i] = i%2;
-        discrete_inputs[i+1] = i%2;
+        registers.HR[i] = i;
+        registers.IR[i] = 2*i;
+        registers.CO[i] = i%2;
+        registers.DI[i+1] = i%2;
     }
 
     struct ModbusFrame packet;
