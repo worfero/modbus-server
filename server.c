@@ -1,78 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <stdbool.h>
-
-#define PORT 502
-#define BUF_SIZE 128
-
-// function codes
-#define READ_COILS 0x01
-#define READ_DISCRETE_INPUTS 0x02
-#define READ_HOLDING_REGISTERS 0x03
-#define READ_INPUT_REGISTERS 0x04
-#define WRITE_SINGLE_COIL 0x05
-#define WRITE_SINGLE_HOLDING_REGISTER 0x06
-#define WRITE_COILS 0x0F
-#define WRITE_HOLDING_REGISTERS 0x10
-
-// message bytes
-#define TRAN_ID_MSB 0
-#define TRAN_ID_LSB 1
-#define PROT_ID_MSB 2
-#define PROT_ID_LSB 3
-#define LENGTH_MSB 4
-#define LENGTH_LSB 5
-#define UNIT_ID 6
-#define F_CODE 7
-// exception byte
-#define EXCEPTION 8
-// data length for reading registers byte
-#define DATA_LENGTH 8
-// address of registers to be written bytes
-#define ADDRESS_MSB 8
-#define ADDRESS_LSB 9
-// quantity of registers to be written in sequence bytes
-#define QUANTITY_MSB 10
-#define QUANTITY_LSB 11
-// data to be returned to client on reading operations, variable size
-#define DATA(x) (x)
-
-// exception codes
-#define ILLEGAL_FC 0x01
-
-// most significant and less significant byte macros
-#define MSBYTE(x) ((x >> 8) & 0xFF)
-#define LSBYTE(x) ((x) & 0xFF)
-
-// round division up macro
-#define CEIL(x, y) ((x + y - 1) / y)
-
-// two char to short conversion macro
-#define TO_SHORT(x, y) (((short)x) << 8) | y
-
-struct ModbusFrame {
-    // MBAP Header
-    short transac_id;
-    short prot_id;
-    short length;
-    unsigned char unit_id;
-    // Application layer
-    unsigned char func_code;
-    short written_address;
-    short written_quantity;
-    unsigned char data_length;
-    unsigned char exception;
-    unsigned char *data;
-};
-
-// declare registers as global variables
-short holding_registers[2000] = {0};
-short input_registers[2000] = {0};
-bool coils[2000] = {0};
-bool discrete_inputs[2000] = {0};
-
+#include "server.h"
 
 int server_setup() {
     int server_fd;
@@ -203,8 +129,8 @@ void write_holding_registers(struct ModbusFrame *packet, unsigned char *buff_rec
 }
 
 void write_coils(struct ModbusFrame *packet, unsigned char *buff_recv) {
-    // number of registers to be written is 11th byte of client request
-    unsigned int number_of_bytes = CEIL((TO_SHORT(buff_recv[10], buff_recv[11])), 8);
+    unsigned int number_of_bytes;
+
     // data length is always 4 bytes for write multiple holding registers. 2 for the starting address and 2 for the quantity
     packet->data_length = 4;
     // packet length is data section length plus the 3 previous bytes
@@ -213,11 +139,13 @@ void write_coils(struct ModbusFrame *packet, unsigned char *buff_recv) {
     packet->written_address = TO_SHORT(buff_recv[8], buff_recv[9]);
     // get quantity of written addresses in sequence from bytes 10 and 11 of client request
     packet->written_quantity = TO_SHORT(buff_recv[10], buff_recv[11]);
+    // number of registers to be written is 11th byte of client request
+    number_of_bytes = CEIL(packet->written_quantity, 8);
     // write coils logic
     for(int i=0; i < number_of_bytes; i++) { // byte count
         for(int j=0; j < 8; j++) { // bit count
             if((j+(i*8)) < packet->written_quantity) { // if there are still coils to be written, proceed
-                coils[(j+(i*8))] = (buff_recv[13+i] >> j) & 0x01; // write j(th) bit of the byte to be written in client request
+                coils[(packet->written_address + (j+(i*8)))] = (buff_recv[13+i] >> j) & 0x01; // write j(th) bit of the byte to be written in client request
             }
             else { // if the number of coils to be written was reached, stop there and break
                 break;
