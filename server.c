@@ -1,80 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <stdbool.h>
+#include "server.h"
 
-#define PORT 502
-#define BUF_SIZE 128
-
-// function codes
-#define READ_COILS 0x01
-#define READ_DISCRETE_INPUTS 0x02
-#define READ_HOLDING_REGISTERS 0x03
-#define READ_INPUT_REGISTERS 0x04
-#define WRITE_SINGLE_COIL 0x05
-#define WRITE_SINGLE_HOLDING_REGISTER 0x06
-#define WRITE_COILS 0x0F
-#define WRITE_HOLDING_REGISTERS 0x10
-
-// message bytes
-#define TRAN_ID_MSB 0
-#define TRAN_ID_LSB 1
-#define PROT_ID_MSB 2
-#define PROT_ID_LSB 3
-#define LENGTH_MSB 4
-#define LENGTH_LSB 5
-#define UNIT_ID 6
-#define F_CODE 7
-// exception byte
-#define EXCEPTION 8
-// data length for reading registers byte
-#define DATA_LENGTH 8
-// address of registers to be written bytes
-#define ADDRESS_MSB 8
-#define ADDRESS_LSB 9
-// quantity of registers to be written in sequence bytes
-#define QUANTITY_MSB 10
-#define QUANTITY_LSB 11
-// data to be returned to client on reading operations, variable size
-#define DATA(x) (x)
-
-// exception codes
-#define ILLEGAL_FC 0x01
-
-// most significant and less significant byte macros
-#define MSBYTE(x) ((x >> 8) & 0xFF)
-#define LSBYTE(x) ((x) & 0xFF)
-
-// round division up macro
-#define CEIL(x, y) ((x + y - 1) / y)
-
-// two char to short conversion macro
-#define TO_SHORT(x, y) (((short)x) << 8) | y
-
-struct ModbusFrame {
-    // MBAP Header
-    short transac_id;
-    short prot_id;
-    short length;
-    unsigned char unit_id;
-    // Application layer
-    unsigned char func_code;
-    short written_address;
-    short written_quantity;
-    unsigned char data_length;
-    unsigned char exception;
-    unsigned char *data;
+struct Registers registers = {
+    .HR = {0},
+    .IR = {0},
+    .CO = {0},
+    .DI = {0}
 };
 
-// declare registers as global variables
-short holding_registers[2000] = {0};
-short input_registers[2000] = {0};
-bool coils[2000] = {0};
-bool discrete_inputs[2000] = {0};
-
-
-int server_setup() {
+int server_setup(char *ip, int port) {
     int server_fd;
     struct sockaddr_in address;
     int opt = 1;
@@ -94,9 +27,9 @@ int server_setup() {
     // Setup address (IPv4)
     address.sin_family = AF_INET;
 
-    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_addr.s_addr = inet_addr(ip);
 
-    address.sin_port = htons(PORT);
+    address.sin_port = htons(port);
 
     if(bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("Binding failed");
@@ -108,7 +41,7 @@ int server_setup() {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d\n", PORT);
+    printf("Server listening on port %d\n", port);
 
     return server_fd;
 }
@@ -125,7 +58,7 @@ void read_coils(struct ModbusFrame *packet, unsigned char *buff_recv) {
     // data fetched from desired coils
     for(int i=0; i < packet->data_length; i++) {
         for (int j = 0; j < 8; ++j) {
-            if (coils[buff_recv[9] + (j+(i*8))] && (number_of_coils > 0)) {
+            if (registers.CO[buff_recv[9] + (j+(i*8))] && (number_of_coils > 0)) {
                 // If the coil is true, set the bit on the data section array
                 packet->data[i] |= (1 << j); 
             }
@@ -148,7 +81,7 @@ void read_discrete_inputs(struct ModbusFrame *packet, unsigned char *buff_recv) 
     // data fetched from desired coils
     for(int i=0; i < packet->data_length; i++) {
         for (int j = 0; j < 8; ++j) {
-            if (discrete_inputs[buff_recv[9] + (j+(i*8))] && (number_of_discretes > 0)) {
+            if (registers.DI[buff_recv[9] + (j+(i*8))] && (number_of_discretes > 0)) {
                 // If the coil is true, set the bit on the data section array
                 packet->data[i] |= (1 << j); 
             }
@@ -168,8 +101,8 @@ void read_holding_registers(struct ModbusFrame *packet, unsigned char *buff_recv
     packet->length = packet->data_length + 3;
     // data fetched from desired registers
     for(int i=0; i < packet->data_length/2; i++) {
-        packet->data[i*2] = (unsigned char)(MSBYTE(holding_registers[buff_recv[9]+i]));
-        packet->data[(i*2)+1] = (unsigned char)(LSBYTE(holding_registers[buff_recv[9]+i]));
+        packet->data[i*2] = (unsigned char)(MSBYTE(registers.HR[buff_recv[9]+i]));
+        packet->data[(i*2)+1] = (unsigned char)(LSBYTE(registers.HR[buff_recv[9]+i]));
     }
 }
 
@@ -182,8 +115,8 @@ void read_input_registers(struct ModbusFrame *packet, unsigned char *buff_recv) 
     packet->length = packet->data_length + 3;
     // data fetched from desired registers
     for(int i=0; i < packet->data_length/2; i++) {
-        packet->data[i*2] = (unsigned char)(MSBYTE(input_registers[buff_recv[9]+i]));
-        packet->data[(i*2)+1] = (unsigned char)(LSBYTE(input_registers[buff_recv[9]+i]));
+        packet->data[i*2] = (unsigned char)(MSBYTE(registers.IR[buff_recv[9]+i]));
+        packet->data[(i*2)+1] = (unsigned char)(LSBYTE(registers.IR[buff_recv[9]+i]));
     }
 }
 
@@ -198,13 +131,13 @@ void write_holding_registers(struct ModbusFrame *packet, unsigned char *buff_rec
     packet->written_quantity = TO_SHORT(buff_recv[10], buff_recv[11]);
     // data to be written to desired registers
     for(int i=0; i < packet->written_quantity; i++) {
-        holding_registers[(packet->written_address + i)] = TO_SHORT(buff_recv[13+(2*i)], buff_recv[14+(2*i)]);
+        registers.HR[(packet->written_address + i)] = TO_SHORT(buff_recv[13+(2*i)], buff_recv[14+(2*i)]);
     }
 }
 
 void write_coils(struct ModbusFrame *packet, unsigned char *buff_recv) {
-    // number of registers to be written is 11th byte of client request
-    unsigned int number_of_bytes = CEIL((TO_SHORT(buff_recv[10], buff_recv[11])), 8);
+    unsigned int number_of_bytes;
+
     // data length is always 4 bytes for write multiple holding registers. 2 for the starting address and 2 for the quantity
     packet->data_length = 4;
     // packet length is data section length plus the 3 previous bytes
@@ -213,11 +146,13 @@ void write_coils(struct ModbusFrame *packet, unsigned char *buff_recv) {
     packet->written_address = TO_SHORT(buff_recv[8], buff_recv[9]);
     // get quantity of written addresses in sequence from bytes 10 and 11 of client request
     packet->written_quantity = TO_SHORT(buff_recv[10], buff_recv[11]);
+    // number of registers to be written is 11th byte of client request
+    number_of_bytes = CEIL(packet->written_quantity, 8);
     // write coils logic
     for(int i=0; i < number_of_bytes; i++) { // byte count
         for(int j=0; j < 8; j++) { // bit count
             if((j+(i*8)) < packet->written_quantity) { // if there are still coils to be written, proceed
-                coils[(packet->written_address + (j+(i*8)))] = (buff_recv[13+i] >> j) & 0x01; // write j(th) bit of the byte to be written in client request
+                registers.CO[(packet->written_address + (j+(i*8)))] = (buff_recv[13+i] >> j) & 0x01; // write j(th) bit of the byte to be written in client request
             }
             else { // if the number of coils to be written was reached, stop there and break
                 break;
@@ -330,18 +265,11 @@ unsigned char *exception_response(struct ModbusFrame packet, int size) {
     return buffer;
 }
 
-int main() {
-    int server_fd = server_setup();
+void start_server(char *ip, int port) {
+    int server_fd = server_setup(ip, port);
     int new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-
-    for(int i = 0; i < 101; i++) {
-        holding_registers[i] = i;
-        input_registers[i] = 2*i;
-        coils[i] = i%2;
-        discrete_inputs[i+1] = i%2;
-    }
 
     struct ModbusFrame packet;
 
@@ -409,6 +337,4 @@ int main() {
             }
         }
     }
-
-    return 0;
 }
