@@ -1,10 +1,5 @@
 #include "server.h"
 
-// short registers.HR[2000] = {0};
-// short registers.IR[2000] = {0};
-// bool registers.CO[2000] = {0};
-// bool registers.DI[2000] = {0};
-
 struct Registers registers = {
     .HR = {0},
     .IR = {0},
@@ -12,7 +7,7 @@ struct Registers registers = {
     .DI = {0}
 };
 
-int server_setup() {
+int server_setup(char *ip, int port) {
     int server_fd;
     struct sockaddr_in address;
     int opt = 1;
@@ -32,9 +27,9 @@ int server_setup() {
     // Setup address (IPv4)
     address.sin_family = AF_INET;
 
-    address.sin_addr.s_addr = inet_addr("192.168.100.200");
+    address.sin_addr.s_addr = inet_addr(ip);
 
-    address.sin_port = htons(PORT);
+    address.sin_port = htons(port);
 
     if(bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("Binding failed");
@@ -46,7 +41,7 @@ int server_setup() {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d\n", PORT);
+    printf("Server listening on port %d\n", port);
 
     return server_fd;
 }
@@ -270,8 +265,8 @@ unsigned char *exception_response(struct ModbusFrame packet, int size) {
     return buffer;
 }
 
-void start_server() {
-    int server_fd = server_setup();
+void start_server(char *ip, int port) {
+    int server_fd = server_setup(ip, port);
     int new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);

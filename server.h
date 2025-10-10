@@ -82,7 +82,7 @@ extern struct Registers registers;
 //extern bool coils[2000];
 //extern bool discrete_inputs[2000];
 
-int server_setup();
+int server_setup(char *ip, int port);
 
 void read_coils(struct ModbusFrame *packet, unsigned char *buff_recv);
 
@@ -106,4 +106,4 @@ unsigned char *write_response(struct ModbusFrame packet, int size);
 
 unsigned char *exception_response(struct ModbusFrame packet, int size);
 
-void start_server();
+void start_server(char *ip, int port);
