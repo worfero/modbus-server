@@ -105,3 +105,5 @@ unsigned char *read_response(struct ModbusFrame packet, int size);
 unsigned char *write_response(struct ModbusFrame packet, int size);
 
 unsigned char *exception_response(struct ModbusFrame packet, int size);
+
+void start_server();
