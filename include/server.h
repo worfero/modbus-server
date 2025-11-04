@@ -10,10 +10,12 @@
     #include <BaseTsd.h>
     typedef SSIZE_T ssize_t;
     typedef SOCKET socket_type;
+    #define CLOSESOCKET closesocket
 #else
     #include <unistd.h>
     #include <arpa/inet.h>
     #include <sys/types.h>
+    #define CLOSESOCKET close
     typedef int socket_type;
     #define INVALID_SOCKET (-1)
     #define SOCKET_ERROR   (-1)

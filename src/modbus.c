@@ -227,76 +227,80 @@ unsigned char *exception_response(struct ModbusFrame packet, int size) {
     return buffer;
 }
 
+void client_connection(socket_type cli_socket){
+    while(1){
+        struct ModbusFrame packet;
+        // Allocate memory for client message buffer, since the data package length varies
+        unsigned char *buff_recv = (unsigned char *)malloc(BUF_SIZE * sizeof(unsigned char));
+        // Declaring pointer to server response buffer, which memory will be allocated later
+        unsigned char *buff_sent;
+        ssize_t bytes_recv;
+
+        if((bytes_recv = read_sck(cli_socket, buff_recv, BUF_SIZE)) > 0) {
+            // fills some of the response bytes according to client's request
+            packet = modbus_frame(buff_recv);
+
+            // total response message length
+            int size = packet.length + 6;
+
+            switch(packet.func_code) {
+                // Read operation buffer
+                case READ_COILS:
+                case READ_DISCRETE_INPUTS:
+                case READ_HOLDING_REGISTERS:
+                case READ_INPUT_REGISTERS:
+                    buff_sent = read_response(packet, size);
+                    break;
+                // Write operation buffer
+                case WRITE_COILS:
+                case WRITE_HOLDING_REGISTERS:
+                    buff_sent = write_response(packet, size);
+                    break;
+                // Illegal function code exception
+                default:
+                    buff_sent = exception_response(packet, size);
+                    break;
+            }
+            
+            ssize_t res_size = packet.length + 6;
+
+            printf("Client message: 0x");
+            for(int i = 0; i < bytes_recv; i++){
+                printf("%02X ", (unsigned char)buff_recv[i]);
+            }
+            printf("\n");
+            printf("Server response: 0x");
+            for(int i = 0; i < res_size; i++){
+                printf("%02X ", (unsigned char)buff_sent[i]);
+            }
+            printf("\n");
+            send(cli_socket, (char *)buff_sent, res_size, 0);
+            free(buff_sent);
+        }
+        else{
+            free(buff_recv);
+            printf("Connection lost...\n");
+            break;
+        }
+        free(buff_recv);
+    }
+}
+
 void ModbusTCPServer(char *ip, int port) {
     int server_fd = server_setup(ip, port);
     socket_type new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-
-    struct ModbusFrame packet;
-
     while(1){
         // Accept connections
         if((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
             printf("Connection failed\n");
+            continue;
         }
         else {
             printf("Connection accepted\n");
-            while(1){
-                // Allocate memory for client message buffer, since the data package length varies
-                unsigned char *buff_recv = (unsigned char *)malloc(BUF_SIZE * sizeof(unsigned char));
-                // Declaring pointer to server response buffer, which memory will be allocated later
-                unsigned char *buff_sent;
-                ssize_t bytes_recv;
-
-                if((bytes_recv = read_sck(new_socket, buff_recv, BUF_SIZE)) > 0) {
-                    // fills some of the response bytes according to client's request
-                    packet = modbus_frame(buff_recv);
-
-                    // total response message length
-                    int size = packet.length + 6;
-
-                    switch(packet.func_code) {
-                        // Read operation buffer
-                        case READ_COILS:
-                        case READ_DISCRETE_INPUTS:
-                        case READ_HOLDING_REGISTERS:
-                        case READ_INPUT_REGISTERS:
-                            buff_sent = read_response(packet, size);
-                            break;
-                        // Write operation buffer
-                        case WRITE_COILS:
-                        case WRITE_HOLDING_REGISTERS:
-                            buff_sent = write_response(packet, size);
-                            break;
-                        // Illegal function code exception
-                        default:
-                            buff_sent = exception_response(packet, size);
-                            break;
-                    }
-                    
-                    ssize_t res_size = packet.length + 6;
-
-                    printf("Client message: 0x");
-                    for(int i = 0; i < bytes_recv; i++){
-                        printf("%02X ", (unsigned char)buff_recv[i]);
-                    }
-                    printf("\n");
-                    printf("Server response: 0x");
-                    for(int i = 0; i < res_size; i++){
-                        printf("%02X ", (unsigned char)buff_sent[i]);
-                    }
-                    printf("\n");
-                    send(new_socket, (char *)buff_sent, res_size, 0);
-                    free(buff_sent);
-                }
-                else{
-                    free(buff_recv);
-                    printf("Connection lost...\n");
-                    break;
-                }
-                free(buff_recv);
-            }
+            client_connection(new_socket);
+            //CLOSESOCKET(new_socket);
         }
     }
 }
