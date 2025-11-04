@@ -229,7 +229,7 @@ unsigned char *exception_response(struct ModbusFrame packet, int size) {
 
 void ModbusTCPServer(char *ip, int port) {
     int server_fd = server_setup(ip, port);
-    int new_socket;
+    socket_type new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
 
@@ -247,9 +247,9 @@ void ModbusTCPServer(char *ip, int port) {
                 unsigned char *buff_recv = (unsigned char *)malloc(BUF_SIZE * sizeof(unsigned char));
                 // Declaring pointer to server response buffer, which memory will be allocated later
                 unsigned char *buff_sent;
-                _ssize_t bytes_recv;
+                ssize_t bytes_recv;
 
-                if((bytes_recv = read(new_socket, buff_recv, BUF_SIZE)) > 0) {
+                if((bytes_recv = read_sck(new_socket, buff_recv, BUF_SIZE)) > 0) {
                     // fills some of the response bytes according to client's request
                     packet = modbus_frame(buff_recv);
 
@@ -275,7 +275,7 @@ void ModbusTCPServer(char *ip, int port) {
                             break;
                     }
                     
-                    _ssize_t res_size = packet.length + 6;
+                    ssize_t res_size = packet.length + 6;
 
                     printf("Client message: 0x");
                     for(int i = 0; i < bytes_recv; i++){
@@ -287,7 +287,7 @@ void ModbusTCPServer(char *ip, int port) {
                         printf("%02X ", (unsigned char)buff_sent[i]);
                     }
                     printf("\n");
-                    send(new_socket, buff_sent, res_size, 0);
+                    send(new_socket, (char *)buff_sent, res_size, 0);
                     free(buff_sent);
                 }
                 else{

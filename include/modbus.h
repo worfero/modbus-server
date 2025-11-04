@@ -77,8 +77,6 @@ struct Registers {
 
 extern struct Registers registers;
 
-int server_setup(char *ip, int port);
-
 void read_coils(struct ModbusFrame *packet, unsigned char *buff_recv);
 
 void read_discrete_inputs(struct ModbusFrame *packet, unsigned char *buff_recv);
