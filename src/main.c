@@ -8,7 +8,7 @@ int main() {
         registers.DI[i+1] = i%2;
     }
 
-    start_server("192.168.100.200", 502);
+    start_server("127.0.0.1", 502);
 
     return 0;
 }
