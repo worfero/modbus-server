@@ -227,7 +227,10 @@ unsigned char *exception_response(struct ModbusFrame packet, int size) {
     return buffer;
 }
 
-void client_connection(socket_type cli_socket){
+THREAD_FUNC client_connection(void *arg){
+    socket_type client_socket = *(socket_type *)arg;
+    free(arg);
+
     while(1){
         struct ModbusFrame packet;
         // Allocate memory for client message buffer, since the data package length varies
@@ -236,7 +239,7 @@ void client_connection(socket_type cli_socket){
         unsigned char *buff_sent;
         ssize_t bytes_recv;
 
-        if((bytes_recv = read_sck(cli_socket, buff_recv, BUF_SIZE)) > 0) {
+        if((bytes_recv = read_sck(client_socket, buff_recv, BUF_SIZE)) > 0) {
             // fills some of the response bytes according to client's request
             packet = modbus_frame(buff_recv);
 
@@ -274,33 +277,66 @@ void client_connection(socket_type cli_socket){
                 printf("%02X ", (unsigned char)buff_sent[i]);
             }
             printf("\n");
-            send(cli_socket, (char *)buff_sent, res_size, 0);
+            send(client_socket, (char *)buff_sent, res_size, 0);
             free(buff_sent);
         }
         else{
             free(buff_recv);
             printf("Connection lost...\n");
+            CLOSESOCKET(client_socket);
             break;
         }
         free(buff_recv);
     }
+    #ifndef _WIN32
+        return NULL;
+    #else
+        return 0;
+    #endif
 }
 
 void ModbusTCPServer(char *ip, int port) {
     int server_fd = server_setup(ip, port);
-    socket_type new_socket;
-    struct sockaddr_in address;
-    int addrlen = sizeof(address);
     while(1){
+        struct sockaddr_in address;
+        #ifdef _WIN32
+            int addrlen = sizeof(address);
+        #else
+            socklen_t addrlen = sizeof(address);
+        #endif
+
+        socket_type *new_socket = malloc(sizeof(socket_type));
+
         // Accept connections
-        if((new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
+        if((*new_socket = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen)) < 0) {
             printf("Connection failed\n");
+            free(new_socket);
             continue;
         }
         else {
             printf("Connection accepted\n");
-            client_connection(new_socket);
-            //CLOSESOCKET(new_socket);
+            THREAD_TYPE thread_id;
+            #ifdef _WIN32
+                thread_id = CreateThread(NULL, 0, client_connection, new_socket, 0, NULL);
+                if (thread_id == NULL) {
+                    printf("Failed to create thread\n");
+                    CLOSESOCKET(*new_socket);
+                    free(new_socket);
+                } else {
+                    CloseHandle(thread_id);
+                }
+            #else
+                if (pthread_create(&thread_id, NULL, client_connection, new_socket) != 0) {
+                    perror("pthread_create");
+                    CLOSESOCKET(*new_socket);
+                    free(new_socket);
+                }
+                pthread_detach(thread_id);
+            #endif
         }
     }
+    CLOSESOCKET(server_fd);
+    #ifdef _WIN32
+        WSACleanup();
+    #endif
 }
