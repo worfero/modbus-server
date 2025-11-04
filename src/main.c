@@ -1,4 +1,4 @@
-#include "server.h"
+#include "modbus.h"
 
 int main() {
     for(int i = 0; i < 101; i++) {
@@ -8,7 +8,7 @@ int main() {
         registers.DI[i+1] = i%2;
     }
 
-    start_server("127.0.0.1", 502);
+    ModbusTCPServer("127.0.0.1", 502);
 
     return 0;
 }
