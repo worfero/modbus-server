@@ -17,6 +17,7 @@
     #include <unistd.h>
     #include <arpa/inet.h>
     #include <sys/types.h>
+    #include <pthread.h>
     typedef int socket_type;
     #define INVALID_SOCKET (-1)
     #define SOCKET_ERROR   (-1)
